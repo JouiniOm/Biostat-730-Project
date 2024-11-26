@@ -6,6 +6,312 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
+
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+installing the needed libraries
+```{r}
+install.packages("multinma")
+```
+
+loading the needed libraries and setting the CPU Cores to a parrallel usage
+```{r}
+library(multinma)
+library(tidyverse)
+library(janitor)
+
+options(mc.cores = parallel::detectCores())
+```
+
+# Loading the data
+
+Loading the parkinsons data. The data are available in this package as `parkinsons`
+
+```{r}
+head(parkinsons)
+
+# infos about the dataset
+parkinsons
+```
+
+# starting the analysis
+
+## Arm based data
+means of y and the Standard error
+
+Preparations:
+In the dataset we have continous data of the "off-time" reducion. 
+"off-time" referes to the time where parkinsonian drugs are not in effect, to which the patients experiances parkinsonian effects. The reduction of the off time is a therapeutic goal.
+
+We use the function `set_agd_arm()` to set up the network.
+
+```{r}
+arm_net <- set_agd_arm( data = parkinsons,
+                        study = studyn,
+                        trt = trtn,
+                        y = y,
+                        se= se,
+                        sample_size = n)
+arm_net
+```
+networks can be ploted
+```{r Plot}
+plot(arm_net)
+plot(arm_net, weight_edges = T)
+plot(arm_net, weight_nodes = T)
+plot(arm_net, weight_edges = T, weight_nodes = T)
+```
+### Meta-Analisis Models
+Both fixed effect (FE) and randome effects (RE) Models are possible,  but fixed effects Models are missing.
+
+#### FE-Model
+```{r}
+summary(normal(scale = 100))
+
+
+arm_fit_FE <- nma(arm_net, 
+                  trt_effects = "fixed",
+                  prior_intercept = normal(scale = 100),
+                  prior_trt = normal(scale = 10))
+
+arm_fit_FE
+#By default, summaries of the study-specific intercepts μ  are hidden, but could be examined by changing the pars argument:
+
+print(arm_fit_FE, pars = c("d", "mu"))
+
+plot_prior_posterior(arm_fit_FE)
+
+```
+
+### RE Model
+
+Here we also set a prior for the heterogenity
+
+```{r RE Model}
+
+arm_fit_RE <- nma(arm_net, 
+                  seed = 379394727,
+                  trt_effects = "random",
+                  prior_intercept = normal(scale = 100),
+                  prior_trt = normal(scale = 100),
+                  prior_het = half_normal(scale = 5),
+                  adapt_delta = 0.99)
+
+
+
+pairs(arm_fit_RE, pars = c("mu[4]", "d[3]", "delta[4: 3]", "tau"))
+```
+
+### Model comparison
+ it is possible to do a comparison withth dic() "Deviance Information Criterion (DIC)" function:
+ 
+```{r}
+arm_dic_FE <- dic(arm_fit_FE)
+arm_dic_FE
+
+arm_dic_RE <- dic(arm_fit_RE)
+arm_dic_RE
+
+plot(arm_dic_FE)
+plot(arm_dic_RE)
+
+```
+### Further results 
+The package also alows you to produce further results, here erlative effects against a reference, where you can define the reference
+
+```{r}
+arm_rel_eff_FR <- relative_effects(arm_fit_FE, trt_ref = 1)
+arm_rel_eff_FR
+plot(arm_rel_eff_FR, ref_line = 0)
+
+arm_releff_RE <- relative_effects(arm_fit_RE, trt_ref = 1)
+plot(arm_releff_RE, ref_line = 0)
+```
+
+
+```{r}
+arm_pred_FE <- predict(arm_fit_FE, 
+                       baseline = distr(qnorm, mean = -0.73, sd = 21^-0.5),
+                       type = "response",
+                       baseline_trt = 1)
+arm_pred_FE
+plot(arm_pred_FE)
+```
+
+### The treatments can also be ranked
+
+```{r}
+arm_ranks <- posterior_ranks(arm_fit_FE) #tretmant ranking : produces posterior rankings, which have a distribution (e.g. mean/median rank and 95% Credible Interval)
+arm_rankprobs <- posterior_rank_probs(arm_fit_FE) # probabilities, which give the posterior probabilities of being ranked first, second, etc. out of all treatments.
+plot(arm_rankprobs)
+plot(arm_ranks)
+# also in a cummulativ way
+arm_cumrankprobs <- posterior_rank_probs(arm_fit_FE, cumulative = TRUE)
+plot(arm_cumrankprobs)
+```
+
+## Useing contraste based data 
+mean difference and standard error difference
+```{r}
+contr_net <- set_agd_contrast(parkinsons, 
+                              study = studyn,
+                              trt = trtn,
+                              y = diff, 
+                              se = se_diff,
+                              sample_size = n)
+contr_net
+plot(contr_net, weight_edges = TRUE, weight_nodes = TRUE)
+
+
+```
+Fixed effects Models
+
+```{r}
+contr_fit_FE <- nma(contr_net, 
+                    trt_effects = "fixed",
+                    prior_trt = normal(scale = 100))
+contr_fit_FE
+
+plot_prior_posterior(contr_fit_FE)
+```
+random effects Models
+
+```{r}
+contr_fit_RE <- nma(contr_net, 
+                    seed = 1150676438,
+                    trt_effects = "random",
+                    prior_trt = normal(scale = 100),
+                    prior_het = half_normal(scale = 5),
+                    adapt_delta = 0.99)
+
+pairs(contr_fit_RE, pars = c("d[3]", "delta[4: 4 vs. 3]", "tau"))
+
+contr_fit_RE
+```
+
+### Model comparison
+```{r}
+contr_dic_FE <- dic(contr_fit_FE)
+contr_dic_RE <- dic(contr_fit_RE)
+plot(contr_dic_FE)
+plot(contr_dic_RE)
+```
+
+### Further Result
+
+```{r}
+contr_releff_FE <- relative_effects(contr_fit_FE, trt_ref = 1)
+
+contr_releff_RE <- relative_effects(contr_fit_RE, trt_rpef = 1)
+plot(contr_releff_FE, ref_line = 0)
+plot(contr_releff_RE, ref_line = 0)
+```
+#### Prediction
+
+```{r}
+contr_pred_FE <- predict(contr_fit_FE, 
+                       baseline = distr(qnorm, mean = -0.73, sd = 21^-0.5),
+                       type = "response",
+                       baseline_trt = 1)
+
+contr_pred_RE <- predict(contr_fit_RE, 
+                       baseline = distr(qnorm, mean = -0.73, sd = 21^-0.5),
+                       type = "response",
+                       baseline_trt = 1)
+contr_pred_FE
+plot(contr_pred_FE)
+
+contr_pred_RE
+plot(contr_pred_RE)
+```
+
+
+## Combination of both
+
+```{r}
+mix_arm_net <- set_agd_arm(parkinsons_arm, 
+                           study = studyn,
+                           trt = trtn,
+                           y = y, 
+                           se = se,
+                           sample_size = n)
+
+mix_contr_net <- set_agd_contrast(parkinsons_contr, 
+                                  study = studyn,
+                                  trt = trtn,
+                                  y = diff, 
+                                  se = se_diff,
+                                  sample_size = n)
+
+mix_net <- combine_network(mix_arm_net, mix_contr_net)
+mix_net
+```
+```{r}
+mix_fit_FE <- nma(mix_net, 
+                  trt_effects = "fixed",
+                  prior_intercept = normal(scale = 100),
+                  prior_trt = normal(scale = 100))
+
+mix_fit_FE
+print(mix_fit_FE, pars = c("d", "mu"))
+plot_prior_posterior(mix_fit_FE)
+
+mix_fit_RE <- nma(mix_net, 
+                  seed = 437219664,
+                  trt_effects = "random",
+                  prior_intercept = normal(scale = 100),
+                  prior_trt = normal(scale = 100),
+                  prior_het = half_normal(scale = 5),
+                  adapt_delta = 0.99)
+
+pairs(mix_fit_RE, pars = c("d[3]", "delta[4: 4 vs. 3]", "tau"))
+```
+
+### Creating a prior/posterior plot
+
+```{r}
+plot_prior_posterior(mix_fit_RE)
+
+```
+
+### model comparrison
+
+```{r}
+mix_dic_FE <- dic(mix_fit_FE)
+mix_dic_RE <- dic(mix_fit_RE)
+
+plot(mix_dic_FE)
+plot(mix_dic_RE)
+```
+
+### Further results
+#### reative effect
+```{r}
+mix_releff_FE <- relative_effects(mix_fit_FE, trt_ref = 1)
+mix_releff_RE <- relative_effects(mix_fit_RE, trt_ref = 1)
+plot(mix_releff_RE, ref_line = 0)
+plot(mix_releff_FE, ref_line = 0)
+```
+
+
+#### Predictions
+
+```{r}
+mix_pred_FE <- predict(mix_fit_FE, 
+                       baseline = distr(qnorm, mean = -0.73, sd = 21^-0.5),
+                       type = "response",
+                       baseline_trt = 1)
+mix_pred_FE
+
+mix_pred_RE <- predict(mix_fit_RE, 
+                       baseline = distr(qnorm, mean = -0.73, sd = 21^-0.5),
+                       type = "response",
+                       baseline_trt = 1)
+mix_pred_RE
+plot(mix_pred_RE)
+plot(mix_pred_FE)
+```
+
+
+# Reproduction with additional Data
