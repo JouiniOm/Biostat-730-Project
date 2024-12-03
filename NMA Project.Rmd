@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 installing the needed libraries
 ```{r}
-install.packages("multinma")
+#install.packages("multinma")
 ```
 
 loading the needed libraries and setting the CPU Cores to a parrallel usage
@@ -230,6 +230,13 @@ plot(contr_pred_RE)
 ## Combination of both
 
 ```{r}
+studies <- parkinsons$studyn
+(parkinsons_arm <- parkinsons[studies %in% 1:3, ])
+(parkinsons_contr <- parkinsons[studies %in% 4:7, ])
+```
+
+
+```{r}
 mix_arm_net <- set_agd_arm(parkinsons_arm, 
                            study = studyn,
                            trt = trtn,
@@ -315,3 +322,12 @@ plot(mix_pred_FE)
 
 
 # Reproduction with additional Data
+
+```{r addting to the parkinsons dataset}
+
+parkinsons 
+
+
+
+```
+
