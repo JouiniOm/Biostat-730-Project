@@ -325,9 +325,65 @@ plot(mix_pred_FE)
 
 ```{r addting to the parkinsons dataset}
 
-parkinsons 
+safinamide_data <- readxl::read_excel("Parkisons_safinamide_data.xlsx")
+dat <- parkinsons
+dat$studyn <- as.character(dat$studyn)
+str(parkinsons)
+str(safinamide_data)
 
+dat<- full_join(dat,safinamide_data)
+```
+```{r}
+dat_net <- set_agd_arm( data = dat,
+                        study = studyn,
+                        trt = trtn,
+                        y = y,
+                        se= se,
+                        sample_size = n)
+dat_net
 
+plot(dat_net, weight_edges = T, weight_nodes = T)
 
 ```
+```{r}
+dat_model <- nma(dat_net, 
+                  trt_effects = "random",
+                  prior_intercept = normal(scale = 100),
+                  prior_trt = normal(scale = 100),
+                  iter = 6000,
+                  chains = 6,
+                  prior_het = normal(scale = 5),
+                  adapt_delta = 0.99)
 
+```
+```{r}
+plot_prior_posterior(dat_model)
+pairs(dat_model, pars = c("mu[Borgohain A]", "mu[Borgohain B]", "mu[Schapira]", "tau"))
+plot(dat_model)
+releff_dat <- relative_effects(dat_model, trt_ref = 1)
+plot(releff_dat, ref_line = 0)
+# Not run
+print(dat_model)
+```
+$$
+
+\begin{equation}
+\hat\theta_{ij} = \mu + \zeta_{ij} + \zeta_{j} + \epsilon_{ij}
+\end{equation}
+$$
+```{r Tau estimate}
+
+summary(dat_model)
+plot(dat_model, pars = "tau")
+
+tau_array <- as.array(dat_model, pars = "tau")
+tausq_array <- tau_array^2
+
+sum_n <- sum(dat$n)
+sum_n
+
+
+print.stan_nma(dat_model)
+
+tausq_array
+```
